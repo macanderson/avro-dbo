@@ -1,6 +1,6 @@
 [project]
 name = "avro-dbo"
-version = "0.1.1"
+version = "0.1.2"
 description = "Python classes from Avro schemas with custom serializers and deserializers, supporting all logical types."
 readme = "README.md"
 
