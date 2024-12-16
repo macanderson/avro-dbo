@@ -1,0 +1,31 @@
+[project]
+name = "avro-dbo"
+version = "0.1.0"
+description = "Python classes from Avro schemas with custom serializers and deserializers, supporting all logical types."
+readme = "README.md"
+
+maintainers = [
+    { name = "Mac Anderson", email = "mac@macanderson.com" }
+]
+authors = [
+    { name = "Mac Anderson", email = "mac@macanderson.com" }
+]
+
+requires-python = ">=3.8"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries"
+]
+
+dependencies = [
+    "attrs",
+    "cattrs"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
