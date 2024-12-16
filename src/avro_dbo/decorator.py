@@ -2,27 +2,100 @@
 # ...
 # Attribution: The Unnatural Group, LLC, Tradesignals project
 
+"""Avro schema decorator for attrs classes.
+
+This module provides decorators and utilities for converting Python classes using attrs
+into Avro schema compatible objects, with special handling for decimal types.
+
+## Features:
+
+- Automatically quantizes decimals to the scale of the field when assigned.
+- Automatically updates the schema to reflect the quantized value.
+- Supports all Avro primitives and logical types.
+- Handles decimals to scale and quantize them to the scale of the field when assigned.
+- Supports nested types, enums, maps, fixed, and unions.
+- Supports default values, including factory functions.
+- Supports docstrings and type hints.
+
+## Example Usage:
+
+1. define the model with @define from attrs
+2. add the avro_schema decorator
+3. add the field with the metadata
+4. create an instance of the model
+5. print the instance
+6. print the avro schema
+
+### `@avro_schema` Decorator Properties:
+- name: str (name of the schema) - defaults to the class name
+- namespace: str (namespace of the schema) - defaults to the module name
+- doc: str (documentation of the schema) - defaults to the class docstring
+- type: str (type of the schema) - defaults to 'record'
+
+```python
+@avro_schema(name="ExampleModel", namespace="com.example", doc="Example model with decimal fields")
+@attrs.define
+class ExampleModel:
+    scaled_decimal: Decimal = attrs.field(
+        default=Decimal("123.4567"),
+        metadata={
+            "logicalType": "decimal",
+            "precision": 6,
+            "scale": 2
+        }
+    )
+```
+#### Create an instance of the model:
+>>> `m = ExampleModel()`
+>>> `print(m.scaled_decimal)`
+# Decimal('123.46') (quantized to scale=2)
+
+#### Assign a value to the field:
+>>> `m.scaled_decimal = Decimal("999.123456789")`
+>>> `print(m.scaled_decimal)`
+# Decimal('999.12') (quantized to scale=2)
+
+
+# The schema is updated to reflect the quantized value.
+>>> `print(m.avro_schema)`
+
+{
+  "type": "record",
+  "name": "ExampleModel",
+  "namespace": "com.example",
+  "fields": [
+    {
+      "name": "scaled_decimal", 
+#       "type": {
+#         "type": "bytes", 
+        "logicalType": "decimal", 
+        "precision": 6,
+        "scale": 2
+      }
+    }
+  ]
+}
+"""
+
 import json
-from decimal import Decimal, getcontext
-from typing import Any, get_origin, get_args
+from decimal import Decimal
+from typing import Dict, Optional, Tuple, get_args, get_origin, Type
+import attrs
 
-from attrs import define, field, fields, NOTHING
-from cattrs import Converter
+converter_cache: Dict = {}
 
-converter = Converter()
-
-AVRO_PRIMITIVES = {
+AVRO_PRIMITIVES: Dict[Type, str] = {
     str: "string",
-    int: "int",
+    int: "int", 
     float: "float",
     bool: "boolean",
     bytes: "bytes"
 }
 
-LOGICAL_TYPE_BASE = {
+LOGICAL_TYPE_BASE: Dict[str, str] = {
     "decimal": "bytes",
     "timestamp-millis": "long",
-    "timestamp-micros": "long",
+    "timestamp-micros": "long", 
     "timestamp-nanos": "long",
     "date": "int",
     "time-millis": "int",
@@ -30,10 +103,21 @@ LOGICAL_TYPE_BASE = {
     "time-nanos": "long"
 }
 
-
-def infer_avro_type(py_type, metadata) -> (str, dict):
+def infer_avro_type(py_type: Type, metadata: Dict) -> Tuple[str, Dict]:
+    """Infer Avro type from Python type and metadata.
+    
+    Args:
+        py_type: Python type to convert
+        metadata: Field metadata dictionary
+        
+    Returns:
+        Tuple of (avro_type, extra_attributes)
+        
+    Raises:
+        ValueError: If type cannot be converted to Avro
+    """
     logical_type = metadata.get("logicalType") or metadata.get("logical_type")
-    extra = {}
+    extra: Dict = {}
     if logical_type:
         if logical_type not in LOGICAL_TYPE_BASE:
             raise ValueError(f"Unsupported logicalType: {logical_type}")
@@ -66,14 +150,25 @@ def infer_avro_type(py_type, metadata) -> (str, dict):
     return primitive, extra
 
 
-def make_field_schema(f):
+def make_field_schema(f: attrs.Attribute) -> Dict:
+    """Convert an attrs field to Avro field schema.
+    
+    Args:
+        f: attrs.Attribute field to convert
+        
+    Returns:
+        Dict containing Avro field schema
+        
+    Raises:
+        ValueError: If field cannot be converted
+    """
     metadata = f.metadata or {}
     py_type = f.type
 
     field_name = metadata.get("alias", f.name)
     doc = metadata.get("doc")
     default_val = None
-    if f.default is not NOTHING:
+    if f.default is not attrs.NOTHING:
         default_val = f.default
 
     field_type, extra = infer_avro_type(py_type, metadata)
@@ -146,11 +241,24 @@ def make_field_schema(f):
     return field_schema
 
 
-def make_avro_schema(cls):
-    name = cls.__name__
-    namespace = cls.__module__
-    doc = getattr(cls, "__doc__", None)
-    field_schemas = [make_field_schema(f) for f in fields(cls)]
+def make_avro_schema(cls: Type, name: Optional[str]=None, namespace: Optional[str]=None, 
+                    doc: Optional[str]=None, type: str='record') -> Dict:
+    """Generate Avro schema from attrs class.
+    
+    Args:
+        cls: @attrs.define decorated class, the model class to convert
+        name: str, Optional schema name
+        namespace: str, Optional schema namespace
+        doc: str, Optional schema documentation
+        type: str, Schema Type, defaults to 'record'
+        
+    Returns:
+        Dict containing complete Avro schema
+    """
+    name = name or cls.__name__
+    namespace = namespace or cls.__module__
+    doc = doc or getattr(cls, "__doc__", None)
+    field_schemas = [make_field_schema(f) for f in attrs.fields(cls)]
     schema = {
         "type": "record",
         "name": name,
@@ -162,228 +270,213 @@ def make_avro_schema(cls):
     return schema
 
 
-def avro_schema(cls):
-    @property
+def quantize_decimal_converter(scale: int):
+    """Create a converter function for decimal quantization.
+    
+    Args:
+        scale: Number of decimal places
+        
+    Returns:
+        Function that quantizes decimals to specified scale
+    """
+    quant = Decimal(10) ** (-scale)
+    def conv(val):
+        if val is None:
+            return None
+        val = Decimal(val)
+        return val.quantize(quant)
+    return conv
+
+def avro_schema(cls: Type) -> Type:
+    """Decorator to add Avro schema capabilities to attrs classes.
+    
+    Args:
+        cls: attrs.define decorated class to decorate
+        
+    Returns:
+        Decorated class with Avro schema capabilities
+    """
+    original_fields = attrs.fields(cls)
+    changed = False
+    new_attributes = {}
+
+    # Add schema properties with override capability
+    @property  # type: ignore # we know what we're doing
+    def avro_schema_name(self):
+        return getattr(self, '__avro_name__', self.__class__.__name__)
+    
+    @avro_schema_name.setter
+    def avro_schema_name(self, value):
+        self.__avro_name__ = value
+    
+    @property  # type: ignore # we know what we're doing
+    def avro_schema_namespace(self):
+        return getattr(self, '__avro_namespace__', self.__class__.__module__)
+    
+    @avro_schema_namespace.setter
+    def avro_schema_namespace(self, value):
+        self.__avro_namespace__ = value or self.__class__.__module__
+    
+    @property # type: ignore # we know what we're doing
+    def avro_schema_doc(self):
+        return getattr(self, '__avro_doc__', self.__class__.__doc__)
+    
+    @avro_schema_doc.setter  # type: ignore # we know what we're doing
+    def avro_schema_doc(self, value):
+        self.__avro_doc__ = value or self.__class__.__doc__
+        
+    @property  # type: ignore # we know what we're doing
+    def avro_schema_type(self):
+        return getattr(self, '__avro_type__', 'record')
+    
+
+    for f in original_fields:
+        metadata = f.metadata or {}
+
+        default_arg = {}
+        if f.default is not attrs.NOTHING:
+            if isinstance(f.default, attrs.Factory):
+                default_arg['factory'] = f.default.factory
+            else:
+                default_arg['default'] = f.default
+
+        # Check if it's decimal
+        if metadata.get("logicalType") == "decimal":
+            scale = metadata["scale"]
+            user_converter = f.converter
+            
+            def combined_converter(x, user_converter=user_converter, scale=scale):
+                x = user_converter(x) if user_converter else x
+                return quantize_decimal_converter(scale)(x)
+            # Use on_setattr=attrs.setters.convert to ensure runtime assignments also get converted
+            new_f = attrs.field(
+                init=f.init,
+                repr=f.repr,
+                hash=f.hash,
+                eq=f.eq,
+                order=f.order,
+                kw_only=f.kw_only,
+                on_setattr=attrs.setters.convert,  # ensure converter runs on assignment
+                converter=combined_converter,
+                validator=f.validator,
+                metadata=metadata,
+                **default_arg
+            )
+            changed = True
+        else:
+            # Just replicate the field
+            new_f = attrs.field(
+                init=f.init,
+                repr=f.repr,
+                hash=f.hash,
+                eq=f.eq,
+                order=f.order,
+                kw_only=f.kw_only,
+                on_setattr=f.on_setattr,
+                converter=f.converter,
+                validator=f.validator,
+                metadata=metadata,
+                **default_arg
+            )
+
+        new_attributes[f.name] = new_f
+
+    if not changed:
+        @property  # type: ignore # we know what we're doing
+        def avro_schema_property(self):
+            return make_avro_schema(
+                type(self), 
+                name=self.avro_schema_name, 
+                namespace=self.avro_schema_namespace,
+                doc=self.avro_schema_doc or 'No documentation provided.',
+                type=self.avro_schema_type or 'record'
+            )
+        
+        cls.avro_schema = avro_schema_property  # type: ignore
+        return cls
+
+    # Remove unsupported arguments like module or inherited.
+    # We'll just use name, new_attributes, bases and auto_attribs.
+    new_cls = attrs.make_class(
+        cls.__name__,
+        new_attributes,
+        bases=cls.__bases__,
+        auto_attribs=False
+    )
+    new_cls.__doc__ = cls.__doc__
+
+    @property  # type: ignore # we know what we're doing
     def avro_schema_property(self):
         return make_avro_schema(type(self))
-    cls.avro_schema = avro_schema_property
-    return cls
 
-def decimal_to_big_endian_bytes(d: Decimal, scale: int) -> bytes:
-    """Convert Decimal to big-endian two's complement bytes."""
-    unscaled = int((d * (10 ** scale)).to_integral_value(rounding="ROUND_HALF_EVEN"))
+    def export_schema(self, filename: Optional[str] = None) -> None:
+        """Export schema to file.
+        
+        Args:
+            filename: Optional filename, defaults to schema name + .avsc
+        """
+        filename = filename or self.__class__.__name__ + '.avsc'
+        schema = make_avro_schema(
+            type(self), 
+            name=self.__class__.__name__,
+            namespace=self.__class__.__module__,
+            doc=self.__class__.__doc__,
+            type='record'
+        )
+        with open(filename, "w") as f:
+            json.dump(schema, f, indent=2)
 
-    if unscaled == 0:
-        return b"\x00"
-
-    # If negative, we will use two's complement
-    sign = 1
-    if unscaled < 0:
-        sign = -1
-        unscaled = -unscaled
-
-    length = (unscaled.bit_length() + 7) // 8
-    candidate = unscaled.to_bytes(length, 'big', signed=False)
-
-    if sign == -1:
-        # If negative, two's complement
-        # Ensure leading bit is set, if not, prepend a byte:
-        if (candidate[0] & 0x80) == 0:
-            candidate = b"\x00" + candidate
-        # Invert bits and add 1
-        as_int = int.from_bytes(candidate, 'big')
-        # Two's complement negative: value = 2^n - X
-        # Easier: int.from_bytes with signed=True can do this directly:
-        # Let's do manual:
-        # Actually, Python 3.2+ supports signed=True in from_bytes, but we are constructing manually.
-        # We'll do the complement:
-        inverted = bytes(b ^ 0xFF for b in candidate)
-        as_int = int.from_bytes(inverted, 'big') + 1
-        candidate = as_int.to_bytes(len(candidate), 'big')
-    else:
-        # If positive and top bit set, prepend 0x00
-        if (candidate[0] & 0x80) == 0x80:
-            candidate = b"\x00" + candidate
-
-    return candidate
-
-def big_endian_bytes_to_decimal(hex_str: str, scale: int) -> Decimal:
-    """Convert a hex string representing big-endian two's complement bytes back to Decimal."""
-    b = bytes.fromhex(hex_str)
-    length = len(b)
-    # Interpret as signed big-endian two's complement
-    value = int.from_bytes(b, 'big', signed=True)
-    # Apply scale
-    getcontext().prec = max(scale+28, 28)  # some extra precision
-    d = Decimal(value) * (Decimal(10) ** (-scale))
-    return d
-
-
-def serialize_avro_value(value, schema):
-    if isinstance(schema, list):
-        # Union type: try each branch
-        for branch in schema:
-            try:
-                return serialize_avro_value(value, branch)
-            except:
-                continue
-        raise ValueError("No union branch matched the value")
-
-    if isinstance(schema, dict):
-        t = schema["type"]
-        if t == "array":
-            items_schema = schema["items"]
-            return [serialize_avro_value(i, items_schema) for i in value]
-        elif t == "map":
-            values_schema = schema["values"]
-            return {k: serialize_avro_value(v, values_schema) for k, v in value.items()}
-        elif t == "enum":
-            # Enum as string symbol
-            if value not in schema["symbols"]:
-                raise ValueError(f"Invalid enum symbol {value}")
-            return value
-        elif t == "fixed":
-            # fixed is bytes, hex encode
-            return value.hex()
-        elif t in ("record", "error"):
-            # record: value should be an object
-            result = {}
-            for f in schema["fields"]:
-                field_name = f["name"]
-                attr_value = getattr(value, field_name, None)
-                result[field_name] = serialize_avro_value(attr_value, f["type"])
-            return result
-        else:
-            logical_type = schema.get("logicalType")
-            if logical_type == "decimal":
-                scale = schema["scale"]
-                d = Decimal(value)
-                big_endian = decimal_to_big_endian_bytes(d, scale)
-                return big_endian.hex()
-            # Other logical types: just return the value directly
-            return value
-    else:
-        # Primitive
-        return value
-
-
-def deserialize_avro_value(data, schema):
-    if isinstance(schema, list):
-        # Union: try each
-        # In a real scenario, you'd have a discriminator or try all branches.
-        for branch in schema:
-            try:
-                return deserialize_avro_value(data, branch)
-            except:
-                pass
-        raise ValueError("No union branch could handle the data")
-
-    if isinstance(schema, dict):
-        t = schema["type"]
-        if t == "array":
-            items_schema = schema["items"]
-            return [deserialize_avro_value(i, items_schema) for i in data]
-        elif t == "map":
-            values_schema = schema["values"]
-            return {k: deserialize_avro_value(v, values_schema) for k, v in data.items()}
-        elif t == "enum":
-            # Already a string symbol
-            if data not in schema["symbols"]:
-                raise ValueError(f"Invalid enum symbol {data}")
-            return data
-        elif t == "fixed":
-            # Convert hex to bytes
-            return bytes.fromhex(data)
-        elif t in ("record", "error"):
-            # Need to reconstruct a record
-            # We'll return a dict here; caller can structure it back into a class
-            result = {}
-            for fdef in schema["fields"]:
-                fname = fdef["name"]
-                fdata = data.get(fname)
-                result[fname] = deserialize_avro_value(fdata, fdef["type"])
-            return result
-        else:
-            logical_type = schema.get("logicalType")
-            if logical_type == "decimal":
-                scale = schema["scale"]
-                # data should be hex string
-                return big_endian_bytes_to_decimal(data, scale)
-            # Other logical types: just return data as is
-            return data
-    else:
-        # Primitive
-        return data
-
-
-def to_avro_data(instance):
-    schema = instance.avro_schema
-    if schema["type"] != "record":
-        raise ValueError("Top-level schema must be a record")
-    result = {}
-    for f in schema["fields"]:
-        field_name = f["name"]
-        # Find corresponding attrs field by matching alias or name
-        # We'll match by alias or name
-        for attr_field in fields(type(instance)):
-            alias = attr_field.metadata.get("alias", attr_field.name)
-            if alias == field_name:
-                attr_value = getattr(instance, attr_field.name)
-                break
-        else:
-            attr_value = None
-
-        result[field_name] = serialize_avro_value(attr_value, f["type"])
-    return result
-
-
-def from_avro_data(data, schema, cls):
-    if schema["type"] != "record":
-        raise ValueError("Top-level schema must be a record")
-    # Deserialize data to a dict of field values
-    field_values = {}
-    for f in schema["fields"]:
-        fname = f["name"]
-        # Find original attr field
-        for attr_field in fields(cls):
-            alias = attr_field.metadata.get("alias", attr_field.name)
-            if alias == fname:
-                original_name = attr_field.name
-                break
-        else:
-            original_name = fname
-
-        field_values[original_name] = deserialize_avro_value(data.get(fname), f["type"])
-
-    # Use cattrs or attrs.factory to construct the instance
-    return cls(**field_values)
+    # ignore the type errors because we know what we're doing
+    new_cls.export_avro_schema = export_schema  # type: ignore
+    new_cls.avro_schema = avro_schema_property  # type: ignore
+    return new_cls
 
 
 # Example usage:
 if __name__ == "__main__":
+
+    # Example Usage
+    # 1. define the model with @define from attrs
+    # 2. add the avro_schema decorator
+    # 3. add the field with the metadata
+    # 4. create an instance of the model
+    # 5. print the instance
+    # 6. print the avro schema
+
     @avro_schema
-    @define
+    @attrs.define
     class ExampleModel:
-        """Example model with a decimal field."""
-        field1: str = field(default="hello", metadata={"doc": "A string field"})
-        field2: Decimal = field(
-            default=Decimal("123.45"),
+        """Model with decimal automatically quantized."""
+        
+        field1: Decimal = attrs.field(
+            default=Decimal("123.4567"),
             metadata={
                 "logicalType": "decimal",
                 "precision": 6,
-                "scale": 2,
-                "doc": "A decimal field"
+                "scale": 2
+            }
+        )
+        field2: Decimal = attrs.field(
+            default=Decimal("10.999"),
+            metadata={
+                "logicalType": "decimal",
+                "precision": 5,
+                "scale": 3
             }
         )
 
-    instance = ExampleModel()
-    instance.field2 = Decimal("1.452432424")
-    # Serialize to Avro data
-    avro_data = to_avro_data(instance)
-    print("Serialized Avro Data:", json.dumps(avro_data, indent=2))
+    m = ExampleModel()
+    print("Initially:", m.field1, m.field2)  # Should be quantized
+    m.field1 = Decimal("999.9999")
+    print("After assignment:", m.field1)  # Should quantize to scale=2 -> 1000.00
+    m.field2 = Decimal("10.123456")
+    print("After assignment:", m.field2)  # Scale=3 -> 10.123
+    print("\n\n <<<<<<AVRO SCHEMA PRINT >>>>>> \n\n")
+    print("Avro Schema:", json.dumps(m.avro_schema, indent=2))  # type: ignore
+    print(">>>> \n\n")
+    m.export_avro_schema()  # type: ignore
+    print(">>>> \n\n")
+    print("Avro Schema:", json.dumps(m.avro_schema, indent=2))  # type: ignore
+    print(">>>> \n\n")
 
-    # Deserialize back to instance
-    new_instance = from_avro_data(avro_data, instance.avro_schema, ExampleModel)
-    print(f"{new_instance.field2 = } is equal to {instance.field2 = }")
-    print("Deserialized Instance:", new_instance)
-    print("Deserialized Decimal field:", new_instance.field2, type(new_instance.field2))
+__all__ = ['avro_schema']

@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "ExampleModel",
+  "namespace": "__main__",
+  "fields": [
+    {
+      "name": "field1",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 6,
+        "scale": 2
+      },
+      "default": "123.4567"
+    },
+    {
+      "name": "field2",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 5,
+        "scale": 3
+      },
+      "default": "10.999"
+    }
+  ],
+  "doc": "Model with decimal automatically quantized."
+}
