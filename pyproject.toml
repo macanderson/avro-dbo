@@ -1,6 +1,6 @@
 [project]
 name = "avro-dbo"
-version = "0.1.3"
+version = "0.1.4"
 description = "Python classes from Avro schemas with custom serializers and deserializers, supporting all logical types."
 readme = "README.md"
 
@@ -24,6 +24,15 @@ classifiers = [
 dependencies = [
     "attrs",
     "cattrs"
+]
+
+dev-dependencies = [
+    "black",
+    "isort",
+    "mypy",
+    "ruff",
+    "mkdocs-material",
+    "mkdocs-material-extensions"
 ]
 
 [build-system]
