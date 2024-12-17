@@ -1,0 +1,28 @@
+{
+    "name": "CustomDecimalModel",
+    "namespace": "com.custom.models",
+    "type": "record",
+    "doc": "Model with decimal automatically quantized.",
+    "fields": [
+        {
+            "default": "123.4567",
+            "name": "field1",
+            "type": {
+                "logicalType": "decimal",
+                "precision": 6,
+                "scale": 2,
+                "type": "bytes"
+            }
+        },
+        {
+            "default": "10.999",
+            "name": "field2",
+            "type": {
+                "logicalType": "decimal",
+                "precision": 5,
+                "scale": 3,
+                "type": "bytes"
+            }
+        }
+    ]
+}

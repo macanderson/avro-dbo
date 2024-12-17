@@ -163,7 +163,7 @@ def make_field_schema(f: attrs.Attribute) -> Dict:
         ValueError: If field cannot be converted
     """
     metadata = f.metadata or {}
-    py_type = f.type
+    py_type = f.type or type(None)
 
     field_name = metadata.get("alias", f.name)
     doc = metadata.get("doc")
@@ -201,11 +201,7 @@ def make_field_schema(f: attrs.Attribute) -> Dict:
             args = get_args(py_type)
             if args and len(args) == 2:
                 val_type, val_extra = infer_avro_type(args[1], {})
-                if val_extra:
-                    val_obj = {"type": val_type, **val_extra}
-                else:
-                    val_obj = val_type
-                values_type = val_obj
+                val_obj = {"type": val_type, **val_extra} if val_extra else {"type": val_type}
             else:
                 raise ValueError(f"Map field {f.name} requires 'values' or a dict type with value hint.")
         type_obj = {"type": "map", "values": values_type}
@@ -222,10 +218,9 @@ def make_field_schema(f: attrs.Attribute) -> Dict:
 
     else:
         if extra:
-            type_obj = {"type": field_type}
-            type_obj.update(extra)
+            type_obj = {"type": field_type, **extra}
         else:
-            type_obj = field_type
+            type_obj = {"type": field_type}
 
     field_schema = {"name": field_name, "type": type_obj}
     if doc:
@@ -241,32 +236,35 @@ def make_field_schema(f: attrs.Attribute) -> Dict:
     return field_schema
 
 
-def make_avro_schema(cls: Type, name: Optional[str]=None, namespace: Optional[str]=None, 
-                    doc: Optional[str]=None, type: str='record') -> Dict:
-    """Generate Avro schema from attrs class.
+def make_avro_schema(
+        cls: Type,
+        name: Optional[str] = None, 
+        namespace: Optional[str] = None, 
+        doc: Optional[str] = None, 
+        schema_type: str = 'record',
+        **kwargs
+    ) -> Dict:
+    """Generate Avro schema from attrs class, allowing overrides via kwargs.
     
     Args:
         cls: @attrs.define decorated class, the model class to convert
-        name: str, Optional schema name
-        namespace: str, Optional schema namespace
-        doc: str, Optional schema documentation
-        type: str, Schema Type, defaults to 'record'
+        name: Optional schema name, overridden by kwargs
+        namespace: Optional schema namespace, overridden by kwargs
+        doc: Optional schema documentation, overridden by kwargs
+        schema_type: Schema Type, defaults to 'record', overridden by kwargs
         
     Returns:
         Dict containing complete Avro schema
     """
-    name = name or cls.__name__
-    namespace = namespace or cls.__module__
-    doc = doc or getattr(cls, "__doc__", None)
-    field_schemas = [make_field_schema(f) for f in attrs.fields(cls)]
     schema = {
-        "type": "record",
-        "name": name,
-        "namespace": namespace,
-        "fields": field_schemas
+        "type": kwargs.get("type", schema_type),
+        "name": kwargs.get("name", name or cls.__name__),
+        "namespace": kwargs.get("namespace", namespace or cls.__module__),
+        "fields": [make_field_schema(f) for f in attrs.fields(cls)]
     }
-    if doc:
-        schema["doc"] = doc.strip()
+    schema_doc = kwargs.get("doc", doc or getattr(cls, "__doc__", None))
+    if schema_doc:
+        schema["doc"] = schema_doc.strip()
     return schema
 
 
@@ -287,149 +285,116 @@ def quantize_decimal_converter(scale: int):
         return val.quantize(quant)
     return conv
 
-def avro_schema(cls: Type) -> Type:
-    """Decorator to add Avro schema capabilities to attrs classes.
+def avro_schema(cls: Type = None, **kwargs) -> Type:
+    """Decorator to add Avro schema capabilities to attrs classes, allowing schema customization.
     
     Args:
         cls: attrs.define decorated class to decorate
+        **kwargs: Keyword arguments for schema customization such as name, namespace, etc.
         
     Returns:
         Decorated class with Avro schema capabilities
     """
-    original_fields = attrs.fields(cls)
-    changed = False
-    new_attributes = {}
+    def wrapper(cls):
+        original_fields = attrs.fields(cls)
+        changed = False
+        new_attributes = {}
 
-    # Add schema properties with override capability
-    @property  # type: ignore # we know what we're doing
-    def avro_schema_name(self):
-        return getattr(self, '__avro_name__', self.__class__.__name__)
-    
-    @avro_schema_name.setter
-    def avro_schema_name(self, value):
-        self.__avro_name__ = value
-    
-    @property  # type: ignore # we know what we're doing
-    def avro_schema_namespace(self):
-        return getattr(self, '__avro_namespace__', self.__class__.__module__)
-    
-    @avro_schema_namespace.setter
-    def avro_schema_namespace(self, value):
-        self.__avro_namespace__ = value or self.__class__.__module__
-    
-    @property # type: ignore # we know what we're doing
-    def avro_schema_doc(self):
-        return getattr(self, '__avro_doc__', self.__class__.__doc__)
-    
-    @avro_schema_doc.setter  # type: ignore # we know what we're doing
-    def avro_schema_doc(self, value):
-        self.__avro_doc__ = value or self.__class__.__doc__
-        
-    @property  # type: ignore # we know what we're doing
-    def avro_schema_type(self):
-        return getattr(self, '__avro_type__', 'record')
-    
+        for f in original_fields:
+            metadata = f.metadata or {}
+            default_arg = {}
+            if f.default is not attrs.NOTHING:
+                if isinstance(f.default, attrs.Factory):
+                    default_arg['factory'] = f.default.factory
+                else:
+                    default_arg['default'] = f.default
 
-    for f in original_fields:
-        metadata = f.metadata or {}
-
-        default_arg = {}
-        if f.default is not attrs.NOTHING:
-            if isinstance(f.default, attrs.Factory):
-                default_arg['factory'] = f.default.factory
+            # Check if it's decimal
+            if metadata.get("logicalType") == "decimal":
+                scale = metadata["scale"]
+                user_converter = f.converter
+                
+                def combined_converter(x, user_converter=user_converter, scale=scale):
+                    x = user_converter(x) if user_converter else x
+                    return quantize_decimal_converter(scale)(x)
+                
+                new_f = attrs.field(
+                    init=f.init,
+                    repr=f.repr,
+                    hash=f.hash,
+                    eq=f.eq,
+                    order=f.order,
+                    kw_only=f.kw_only,
+                    on_setattr=attrs.setters.convert,
+                    converter=combined_converter,
+                    validator=f.validator,
+                    metadata=metadata,
+                    **default_arg
+                )
+                changed = True
             else:
-                default_arg['default'] = f.default
+                new_f = attrs.field(
+                    init=f.init,
+                    repr=f.repr,
+                    hash=f.hash,
+                    eq=f.eq,
+                    order=f.order,
+                    kw_only=f.kw_only,
+                    on_setattr=f.on_setattr,
+                    converter=f.converter,
+                    validator=f.validator,
+                    metadata=metadata,
+                    **default_arg
+                )
 
-        # Check if it's decimal
-        if metadata.get("logicalType") == "decimal":
-            scale = metadata["scale"]
-            user_converter = f.converter
+            new_attributes[f.name] = new_f
+
+        if not changed:
+            @property
+            def avro_schema_property(self):
+                return make_avro_schema(
+                    type(self), 
+                    **kwargs
+                )
             
-            def combined_converter(x, user_converter=user_converter, scale=scale):
-                x = user_converter(x) if user_converter else x
-                return quantize_decimal_converter(scale)(x)
-            # Use on_setattr=attrs.setters.convert to ensure runtime assignments also get converted
-            new_f = attrs.field(
-                init=f.init,
-                repr=f.repr,
-                hash=f.hash,
-                eq=f.eq,
-                order=f.order,
-                kw_only=f.kw_only,
-                on_setattr=attrs.setters.convert,  # ensure converter runs on assignment
-                converter=combined_converter,
-                validator=f.validator,
-                metadata=metadata,
-                **default_arg
-            )
-            changed = True
-        else:
-            # Just replicate the field
-            new_f = attrs.field(
-                init=f.init,
-                repr=f.repr,
-                hash=f.hash,
-                eq=f.eq,
-                order=f.order,
-                kw_only=f.kw_only,
-                on_setattr=f.on_setattr,
-                converter=f.converter,
-                validator=f.validator,
-                metadata=metadata,
-                **default_arg
-            )
+            cls.avro_schema = avro_schema_property
+            return cls
 
-        new_attributes[f.name] = new_f
+        new_cls = attrs.make_class(
+            cls.__name__,
+            new_attributes,
+            bases=cls.__bases__,
+            auto_attribs=False
+        )
+        new_cls.__doc__ = cls.__doc__
 
-    if not changed:
-        @property  # type: ignore # we know what we're doing
+        @property
         def avro_schema_property(self):
             return make_avro_schema(
-                type(self), 
-                name=self.avro_schema_name, 
-                namespace=self.avro_schema_namespace,
-                doc=self.avro_schema_doc or 'No documentation provided.',
-                type=self.avro_schema_type or 'record'
+                type(self),
+                **kwargs
             )
-        
-        cls.avro_schema = avro_schema_property  # type: ignore
-        return cls
 
-    # Remove unsupported arguments like module or inherited.
-    # We'll just use name, new_attributes, bases and auto_attribs.
-    new_cls = attrs.make_class(
-        cls.__name__,
-        new_attributes,
-        bases=cls.__bases__,
-        auto_attribs=False
-    )
-    new_cls.__doc__ = cls.__doc__
+        @classmethod
+        def export_schema(cls, filename: str):
+            """Export the Avro schema to a file.
+            
+            Args:
+                filename: str, the filename to export the schema to
+            """
+            schema = make_avro_schema(cls, **kwargs)
+            with open(filename, "w") as file:
+                json.dump(schema, file)
+            return schema
 
-    @property  # type: ignore # we know what we're doing
-    def avro_schema_property(self):
-        return make_avro_schema(type(self))
+        new_cls.avro_schema = avro_schema_property
+        new_cls.export_schema = export_schema
+        return new_cls
 
-    def export_schema(self, filename: Optional[str] = None) -> None:
-        """Export schema to file.
-        
-        Args:
-            filename: Optional filename, defaults to schema name + .avsc
-        """
-        filename = filename or self.__class__.__name__ + '.avsc'
-        schema = make_avro_schema(
-            type(self), 
-            name=self.__class__.__name__,
-            namespace=self.__class__.__module__,
-            doc=self.__class__.__doc__,
-            type='record'
-        )
-        with open(filename, "w") as f:
-            json.dump(schema, f, indent=2)
-
-    # ignore the type errors because we know what we're doing
-    new_cls.export_avro_schema = export_schema  # type: ignore
-    new_cls.avro_schema = avro_schema_property  # type: ignore
-    return new_cls
+    if cls is None:
+        return wrapper
+    else:
+        return wrapper(cls)
 
 
 # Example usage:
@@ -443,7 +408,11 @@ if __name__ == "__main__":
     # 5. print the instance
     # 6. print the avro schema
 
-    @avro_schema
+    @avro_schema(
+        name="Custo1111mName",
+        schema_type="record", 
+        namespace='com.namespace.com'
+    )
     @attrs.define
     class ExampleModel:
         """Model with decimal automatically quantized."""
@@ -474,7 +443,7 @@ if __name__ == "__main__":
     print("\n\n <<<<<<AVRO SCHEMA PRINT >>>>>> \n\n")
     print("Avro Schema:", json.dumps(m.avro_schema, indent=2))  # type: ignore
     print(">>>> \n\n")
-    m.export_avro_schema()  # type: ignore
+    m.export_schema('schema.json')  # type: ignore
     print(">>>> \n\n")
     print("Avro Schema:", json.dumps(m.avro_schema, indent=2))  # type: ignore
     print(">>>> \n\n")

@@ -1,0 +1,4 @@
+site_name: Avro DBO
+site_url: https://avro-dbo.readthedocs.io/en/latest/
+site_description: Avro DBO is a Python library for handling Apache Avro schemas.
+site_author: Avro DBO

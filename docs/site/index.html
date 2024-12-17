@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="None">
+        
+        
+        <link rel="shortcut icon" href="img/favicon.ico">
+        <title>My Docs</title>
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+        <link href="css/fontawesome.min.css" rel="stylesheet">
+        <link href="css/brands.min.css" rel="stylesheet">
+        <link href="css/solid.min.css" rel="stylesheet">
+        <link href="css/v4-font-face.min.css" rel="stylesheet">
+        <link href="css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body class="homepage">
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href=".">My Docs</a>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#avro-dbo" class="nav-link">Avro DBO 🚀</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#features" class="nav-link">✨ Features</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#quick-start" class="nav-link">🚀 Quick Start</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#decimal10000" class="nav-link">&gt; Decimal("100.00")</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#extra-precision-is-truncated-to-the-scale" class="nav-link">extra precision is truncated to the scale</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#documentation" class="nav-link">📚 Documentation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#contributing" class="nav-link">🤝 Contributing</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#license" class="nav-link">📜 License</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="avro-dbo">Avro DBO 🚀</h1>
+<p><a href="https://badge.fury.io/py/avro-dbo"><img alt="PyPI version" src="https://badge.fury.io/py/avro-dbo.svg" /></a>
+<a href="https://opensource.org/licenses/Apache-2.0"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" /></a>
+<a href="https://pypi.org/project/avro-dbo/"><img alt="Python Versions" src="https://img.shields.io/pypi/pyversions/avro-dbo.svg" /></a></p>
+<p>Avro DBO is a robust Python library designed for handling Apache Avro schemas. It facilitates seamless data serialization and schema management, making it ideal for data engineering pipelines and stream processing applications.</p>
+<h2 id="features">✨ Features</h2>
+<ul>
+<li>🏗️ <strong>Schema-First Development</strong>: Generate Python classes from Avro schemas.</li>
+<li>🔄 <strong>Full Type Support</strong>: Supports all Avro logical types including arrays and enums.</li>
+<li>🛠️ <strong>Custom Serialization</strong>: Offers flexible serializers and deserializers.</li>
+<li>🌐 <strong>Schema Registry Integration</strong>: Integrates natively with Confluent Schema Registry.</li>
+<li>🔒 <strong>Type Safety</strong>: Ensures full static type checking.</li>
+<li>⚡ <strong>High Performance</strong>: Optimized for high-load production environments.</li>
+</ul>
+<h2 id="quick-start">🚀 Quick Start</h2>
+<ol>
+<li><strong>Install from PyPI</strong></li>
+</ol>
+<p><code>bash
+   pip install avro-dbo</code></p>
+<h3 id="example-schemas-for-each-avro-logical-type">Example Schemas for Each Avro Logical Type</h3>
+<ul>
+<li><strong>Decimal Type</strong></li>
+</ul>
+<p>```python
+  from attrs import field, define
+  from decimal import Decimal</p>
+<p>@define
+  @avro_schema
+  class DecimalModel:
+      amount: Decimal = field(
+          default=Decimal("100.00"),
+          metadata={
+              "logicalType": "decimal",
+              "precision": 10,
+              "scale": 2
+          }
+      )
+  ```</p>
+<ul>
+<li><strong>Timestamp (millis) Type</strong></li>
+</ul>
+<p>```python
+  from attrs import field, define
+  import datetime</p>
+<p>@define
+  @avro_schema
+  class TimestampModel:
+      created_at: datetime.datetime = field(
+          metadata={
+              "logicalType": "timestamp-millis"
+          }
+      )
+  ```</p>
+<ul>
+<li><strong>Enum Type</strong></li>
+</ul>
+<p>```python
+  from attrs import field, define
+  from enum import Enum</p>
+<p>class Status(Enum):
+      ACTIVE = "ACTIVE"
+      INACTIVE = "INACTIVE"</p>
+<p>@define
+  @avro_schema
+  class EnumModel:
+      status: Status = field(
+          default=Status.ACTIVE,
+          metadata={
+              "logicalType": "enum",
+              "symbols": list(Status)
+          }
+      )
+  ```</p>
+<ul>
+<li><strong>Array Type</strong></li>
+</ul>
+<p>```python
+  from attrs import field, define
+  from typing import List</p>
+<p>@define
+  @avro_schema
+  class ArrayModel:
+      tags: List[str] = field(
+          factory=list,
+          metadata={
+              "logicalType": "array",
+              "items": "string"
+          }
+      )
+  ```</p>
+<ul>
+<li><strong>Kitchen Sink Example</strong></li>
+</ul>
+<p>```python
+  from attrs import field, define
+  from decimal import Decimal
+  from enum import Enum
+  from typing import List
+  import datetime</p>
+<p>class Status(Enum):
+      ACTIVE = "ACTIVE"
+      INACTIVE = "INACTIVE"</p>
+<p>@define
+  @avro_schema
+  class KitchenSinkModel:
+      name: str = field(default="")
+      amount: Decimal = field(
+          default=Decimal("999.99"),
+          metadata={
+              "logicalType": "decimal",
+              "precision": 10,
+              "scale": 2
+          }
+      )
+      status: Status = field(
+          default=Status.ACTIVE,
+          metadata={
+              "logicalType": "enum",
+              "symbols": list(Status)
+          }
+      )
+      created_at: datetime.datetime = field(
+          metadata={
+              "logicalType": "timestamp-millis"
+          }
+      )
+      tags: List[str] = field(
+          factory=list,
+          metadata={
+              "logicalType": "array",
+              "items": "string"
+          }
+      )
+  ```</p>
+<h3 id="example-avro-schema-output">Example Avro Schema Output</h3>
+<p>You can use the <code>export_schema()</code> method to export the schema as a JSON object.</p>
+<pre><code class="language-python">print(KitchenSinkModel.export_schema())
+</code></pre>
+<p>The result will be a JSON object that can be used to define the schema in a Confluent Schema Registry.</p>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;record&quot;,
+  &quot;name&quot;: &quot;KitchenSinkModel&quot;,
+  &quot;fields&quot;: [
+    {&quot;name&quot;: &quot;name&quot;, &quot;type&quot;: &quot;string&quot;, &quot;default&quot;: &quot;&quot;},
+    {&quot;name&quot;: &quot;amount&quot;, &quot;type&quot;: &quot;decimal&quot;, &quot;precision&quot;: 10, &quot;scale&quot;: 2},
+    {&quot;name&quot;: &quot;status&quot;, &quot;type&quot;: &quot;enum&quot;, &quot;symbols&quot;: [&quot;ACTIVE&quot;, &quot;INACTIVE&quot;]},
+    {&quot;name&quot;: &quot;created_at&quot;, &quot;type&quot;: &quot;long&quot;, &quot;logicalType&quot;: &quot;timestamp-millis&quot;},
+    {&quot;name&quot;: &quot;tags&quot;, &quot;type&quot;: &quot;array&quot;, &quot;items&quot;: &quot;string&quot;}
+  ]
+}
+</code></pre>
+<h3 id="saving-an-avro-schema-to-a-file">Saving an Avro Schema to a File</h3>
+<p>You can use the <code>export_schema()</code> method to export the schema as a JSON object.</p>
+<pre><code class="language-python">KitchenSinkModel.export_schema(filename=&quot;kitchen_sink_model.json&quot;)
+</code></pre>
+<h3 id="coercing-a-python-class-using-avro-schema-model">Coercing a Python Class Using Avro Schema Model</h3>
+<p>Avro-DBO will coerce automnatically all fields in the schema to the correct type.</p>
+<p>Avro to datetime, date, decimal, enum, array, and more.</p>
+<h4 id="example-with-decimal">Example with Decimal</h4>
+<p>```python
+from attrs import field, define
+from decimal import Decimal</p>
+<p>@define
+@avro_schema
+class DecimalModel:
+    amount: Decimal = field(
+        default=Decimal("100.00"),
+        metadata={
+            "logicalType": "decimal",
+            "precision": 10,
+            "scale": 2
+        }
+    )</p>
+<p>my_model = DecimalModel()
+print(my_model.amount)</p>
+<h1 id="decimal10000">&gt; Decimal("100.00")</h1>
+<h1 id="extra-precision-is-truncated-to-the-scale">extra precision is truncated to the scale</h1>
+<p>my_model.amount = Decimal("100.00383889328932")
+print(my_model.amount)
+    # &gt; Decimal("100.00")
+    ```</p>
+<h2 id="documentation">📚 Documentation</h2>
+<p>For detailed usage instructions, type hints, and comprehensive examples, please refer to our <a href="https://avro-dbo.readthedocs.io/en/latest/">documentation</a>.</p>
+<h2 id="contributing">🤝 Contributing</h2>
+<p>We welcome contributions! To submit issues or propose changes, please visit our <a href="https://github.com/avro-dbo/avro-dbo">GitHub repository</a>. See the <a href="CONTRIBUTING.md">CONTRIBUTING.md</a> file for more information on how to contribute.</p>
+<h2 id="license">📜 License</h2>
+<p>This project is licensed under the Apache 2.0 License - see the <a href="LICENSE">LICENSE</a> file for details.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = ".",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="js/base.js"></script>
+        <script src="search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
+
+<!--
+MkDocs version : 1.6.1
+Build Date UTC : 2024-12-17 00:15:35.437911+00:00
+-->
